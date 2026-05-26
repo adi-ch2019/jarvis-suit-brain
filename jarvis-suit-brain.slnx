@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Jarvis.Shared/Jarvis.Shared.csproj" />
+    <Project Path="src/Jarvis.SuitTelemetryApi/Jarvis.SuitTelemetryApi.csproj" />
+    <Project Path="src/Jarvis.SuitWorker/Jarvis.SuitWorker.csproj" />
+  </Folder>
+</Solution>
