@@ -11,4 +11,8 @@
     <PackageReference Include="Azure.Messaging.ServiceBus" Version="7.18.1" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\azure-projects-portfolio\adf-asql-redis-terraform-cicd\jarvis-suit-brain\src\Jarvis.Shared\Jarvis.Shared.csproj" />
+  </ItemGroup>
 </Project>
