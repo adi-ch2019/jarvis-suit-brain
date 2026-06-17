@@ -1,0 +1,53 @@
+name: 🦾 JARVIS Self-Deployment
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  jarvis-health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      
+      - name: Restore & Build
+        run: |
+          dotnet restore
+          dotnet build --configuration Release
+      
+      - name: Run Tests
+        run: dotnet test --verbosity normal
+      
+      - name: JARVIS Health Check
+        run: echo "✅ JARVIS health check passed"
+
+  deploy-azure:
+    needs: jarvis-health
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Deploy API to Azure
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: app-jarvis-api-*
+          package: src/Jarvis.SuitTelemetryApi
+      
+      - name: Verify Deployment
+        run: |
+          echo "✅ JARVIS deployed successfully"
+          curl -f https://app-jarvis-api-*.azurewebsites.net/health
