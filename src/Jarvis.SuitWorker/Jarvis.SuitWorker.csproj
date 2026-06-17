@@ -13,6 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\azure-projects-portfolio\adf-asql-redis-terraform-cicd\jarvis-suit-brain\src\Jarvis.Shared\Jarvis.Shared.csproj" />
+    <ProjectReference Include="..\Jarvis.Shared\Jarvis.Shared.csproj" />
   </ItemGroup>
+
 </Project>
