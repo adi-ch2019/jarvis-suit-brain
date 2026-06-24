@@ -9,3 +9,4 @@ obj/
 .terraform/
 terraform/.terraform/
 appsettings.Development.json
+terraform/.terraform.lock.hcl
