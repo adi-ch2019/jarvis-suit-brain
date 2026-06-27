@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Azure.Messaging.ServiceBus;
 using Jarvis.SuitTelemetryApi.Data;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using HealthChecks.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,15 +43,15 @@ if (!string.IsNullOrEmpty(serviceBusConnection))
 }
 else
 {
-    // Local development fallback
-    builder.Services.AddSingleton<ServiceBusSender>(null!);
+    // Local development fallback: register a factory that returns null so the Func overload is chosen
+    builder.Services.AddSingleton(typeof(ServiceBusSender), _ => null!);
     Console.WriteLine("⚠️ JARVIS: Running with SQL+Redis only (Service Bus disabled)");
 }
 
 // Health Checks
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<SuitDbContext>("SQL Database")
-    .AddRedis(redisConnection, "Redis Cache");
+    .AddRedis(redisConnection, name: "Redis Cache");
 
 builder.Services.AddCors(options =>
 {
