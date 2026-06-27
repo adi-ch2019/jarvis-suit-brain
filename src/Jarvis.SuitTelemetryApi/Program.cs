@@ -7,38 +7,50 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new()
+    {
+        Title = "JARVIS Suit Telemetry API",
+        Version = "v1",
+        Description = "Iron Man Suit Management System with 3 Backing Services"
+    });
+});
 
-// 1. SQL Database
-var sqlConnection = builder.Configuration.GetConnectionString("SuitDatabase") 
+// ===== BACKING SERVICE #1: SQL Database =====
+var sqlConnection = builder.Configuration.GetConnectionString("SuitDatabase")
     ?? throw new InvalidOperationException("SQL connection required");
 builder.Services.AddDbContext<SuitDbContext>(options =>
     options.UseSqlServer(sqlConnection));
 
-// 2. Redis Cache
-var redisConnection = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+// ===== BACKING SERVICE #2: Redis Cache =====
+var redisConnection = builder.Configuration.GetConnectionString("Redis")
+    ?? "localhost:6379";
 builder.Services.AddStackExchangeRedisCache(options =>
 {
     options.Configuration = redisConnection;
     options.InstanceName = "JarvisCache:";
 });
 
-// 3. Service Bus (Optional)
+// ===== BACKING SERVICE #3: Service Bus =====
 var serviceBusConnection = builder.Configuration.GetConnectionString("ServiceBus");
 if (!string.IsNullOrEmpty(serviceBusConnection))
 {
     builder.Services.AddSingleton(_ => new ServiceBusClient(serviceBusConnection));
-    Console.WriteLine("✅ JARVIS: Service Bus enabled");
+    builder.Services.AddSingleton(p => p.GetRequiredService<ServiceBusClient>().CreateSender("suit-events"));
+    Console.WriteLine("✅ JARVIS: All 3 Backing Services enabled");
 }
 else
 {
-    builder.Services.AddSingleton<ServiceBusClient>(_ => null!);
-    Console.WriteLine("⚠️ JARVIS: Service Bus disabled (local mode)");
+    // Local development fallback
+    builder.Services.AddSingleton<ServiceBusSender>(null!);
+    Console.WriteLine("⚠️ JARVIS: Running with SQL+Redis only (Service Bus disabled)");
 }
 
-// 4. Health Checks
+// Health Checks
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<SuitDbContext>("SuitDatabase");
+    .AddDbContextCheck<SuitDbContext>("SQL Database")
+    .AddRedis(redisConnection, "Redis Cache");
 
 builder.Services.AddCors(options =>
 {
@@ -50,7 +62,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Ensure database exists
+// Ensure SQL database exists
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<SuitDbContext>();

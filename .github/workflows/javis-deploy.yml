@@ -1,53 +1,86 @@
-name: 🦾 JARVIS Self-Deployment
+name: 🦾 JARVIS CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
 
+env:
+  DOTNET_VERSION: '8.0.x'
+
 jobs:
-  jarvis-health:
+  # ===== BUILD & TEST =====
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
-      
-      - name: Restore & Build
-        run: |
-          dotnet restore
-          dotnet build --configuration Release
-      
-      - name: Run Tests
-        run: dotnet test --verbosity normal
-      
-      - name: JARVIS Health Check
-        run: echo "✅ JARVIS health check passed"
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
-  deploy-azure:
-    needs: jarvis-health
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --verbosity normal
+
+      - name: Publish API
+        run: dotnet publish src/Jarvis.SuitTelemetryApi -c Release -o publish/api
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-api
+          path: publish/api
+
+  # ===== DEPLOY TO AZURE =====
+  deploy:
+    needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Login to Azure
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-      
-      - name: Deploy API to Azure
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Terraform Apply (IaC)
+        run: |
+          cd terraform
+          terraform init
+          terraform apply -auto-approve
+
+      - name: Get App Name
+        run: |
+          cd terraform
+          echo "APP_NAME=$(terraform output -raw app_url | sed 's|https://||' | cut -d. -f1)" >> $GITHUB_ENV
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: jarvis-api
+          path: publish/api
+
+      - name: Deploy to App Service
         uses: azure/webapps-deploy@v2
         with:
-          app-name: app-jarvis-api-*
-          package: src/Jarvis.SuitTelemetryApi
-      
+          app-name: ${{ env.APP_NAME }}
+          package: publish/api
+
       - name: Verify Deployment
         run: |
-          echo "✅ JARVIS deployed successfully"
-          curl -f https://app-jarvis-api-*.azurewebsites.net/health
+          echo "✅ JARVIS deployed to: ${{ env.APP_NAME }}.azurewebsites.net"
+          curl -f https://${{ env.APP_NAME }}.azurewebsites.net/health

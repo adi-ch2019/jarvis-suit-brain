@@ -13,20 +13,20 @@ namespace Jarvis.SuitTelemetryApi.Controllers;
 public class SuitController : ControllerBase
 {
     private readonly SuitDbContext _db;
-    private readonly IDistributedCache _cache;
-    private readonly ServiceBusSender? _serviceBusSender;
+    private readonly IDistributedCache _cache;          // Backing Service #1: Redis
+    private readonly ServiceBusSender _serviceBusSender; // Backing Service #2: Service Bus
     private readonly ILogger<SuitController> _logger;
 
     public SuitController(
         SuitDbContext db,
         IDistributedCache cache,
-        ServiceBusClient? serviceBusClient,
+        ServiceBusSender serviceBusSender,
         ILogger<SuitController> logger)
     {
         _db = db;
         _cache = cache;
+        _serviceBusSender = serviceBusSender;
         _logger = logger;
-        _serviceBusSender = serviceBusClient?.CreateSender("suit-events");
     }
 
     [HttpPost("status")]
@@ -34,32 +34,36 @@ public class SuitController : ControllerBase
     {
         try
         {
-            // 1. Store in Redis cache (Fast access for Tony's HUD)
+            // 1. Store in Redis Cache (Fast access - Backing Service #1)
             var cacheKey = $"suit:{suitEvent.SuitId}:status";
-            await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(suitEvent), 
-                new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
+            await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(suitEvent),
+                new DistributedCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
+                });
 
-            // 2. Store in SQL (Sokovia Accords compliance)
+            // 2. Store in SQL Database (History - Backing Service #2)
             await _db.SuitTelemetry.AddAsync(suitEvent);
             await _db.SaveChangesAsync();
 
-            // 3. Send to Service Bus (JARVIS async processing)
-            if (_serviceBusSender != null)
+            // 3. Send to Service Bus (Async processing - Backing Service #3)
+            var message = new ServiceBusMessage(JsonSerializer.Serialize(suitEvent))
             {
-                var message = new ServiceBusMessage(JsonSerializer.Serialize(suitEvent))
-                {
-                    MessageId = suitEvent.EventId,
-                    Subject = "SuitStatusUpdated"
-                };
-                await _serviceBusSender.SendMessageAsync(message);
-            }
+                MessageId = suitEvent.EventId,
+                Subject = "SuitStatusUpdated",
+                ContentType = "application/json"
+            };
+            await _serviceBusSender.SendMessageAsync(message);
 
-            _logger.LogInformation("JARVIS recorded {SuitId}: Power={PowerLevel}%", 
+            _logger.LogInformation("✅ JARVIS: {SuitId} - Power={PowerLevel}%, Cache+SQL+ServiceBus", 
                 suitEvent.SuitId, suitEvent.PowerLevel);
-            
-            return Ok(new { 
-                message = $"✅ JARVIS recorded {suitEvent.SuitId}", 
-                eventId = suitEvent.EventId 
+
+            return Ok(new
+            {
+                message = $"✅ JARVIS recorded {suitEvent.SuitId}",
+                eventId = suitEvent.EventId,
+                timestamp = suitEvent.Timestamp,
+                services = new { cache = true, database = true, servicebus = true }
             });
         }
         catch (Exception ex)
@@ -72,29 +76,25 @@ public class SuitController : ControllerBase
     [HttpGet("{suitId}/status")]
     public async Task<IActionResult> GetSuitStatus(string suitId)
     {
+        // First check Redis (Fast)
         var cacheKey = $"suit:{suitId}:status";
         var cached = await _cache.GetStringAsync(cacheKey);
         
-        if (cached != null)
-            return Ok(JsonSerializer.Deserialize<SuitStatusEvent>(cached));
+        if (!string.IsNullOrEmpty(cached))
+        {
+            var suitEvent = JsonSerializer.Deserialize<SuitStatusEvent>(cached);
+            return Ok(new { source = "Redis Cache", data = suitEvent });
+        }
         
+        // Fallback to SQL
         var latest = await _db.SuitTelemetry
             .Where(s => s.SuitId == suitId)
             .OrderByDescending(s => s.Timestamp)
             .FirstOrDefaultAsync();
             
-        return latest == null ? NotFound() : Ok(latest);
-    }
-
-    [HttpGet("all")]
-    public async Task<IActionResult> GetAllSuits()
-    {
-        var suits = await _db.SuitTelemetry
-            .GroupBy(s => s.SuitId)
-            .Select(g => g.OrderByDescending(x => x.Timestamp).First())
-            .Take(100)
-            .ToListAsync();
+        if (latest == null)
+            return NotFound(new { error = $"No suit data found for {suitId}" });
             
-        return Ok(new { totalSuits = suits.Count, suits });
+        return Ok(new { source = "SQL Database", data = latest });
     }
 }
