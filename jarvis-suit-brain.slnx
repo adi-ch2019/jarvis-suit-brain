@@ -1,7 +1,12 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Jarvis.Api/Jarvis.Api.csproj" />
     <Project Path="src/Jarvis.Shared/Jarvis.Shared.csproj" />
-    <Project Path="src/Jarvis.SuitTelemetryApi/Jarvis.SuitTelemetryApi.csproj" />
-    <Project Path="src/Jarvis.SuitWorker/Jarvis.SuitWorker.csproj" />
+    <Project Path="src/Jarvis.Worker/Jarvis.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Jarvis.Api.Tests/Jarvis.Api.Tests.csproj" />
+    <Project Path="tests/Jarvis.Shared.Tests/Jarvis.Shared.Tests.csproj" />
+    <Project Path="tests/Jarvis.Worker.Tests/Jarvis.Worker.Tests.csproj" />
   </Folder>
 </Solution>

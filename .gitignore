@@ -1,12 +1,177 @@
+# ============================================================
+# .NET
+# ============================================================
 bin/
 obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+build/
+bld/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
 *.user
 *.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
 .vs/
+.vscode/
 .idea/
+*.rsuser
+*.tmp
+*.tmp_proj
+*_i.c
+*_p.c
+*_h.c
+*.ilk
+*.meta
+*.obj
+*.pch
+*.pdb
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tlog
+*.vspscc
+*.vssscc
+.vspscc
+.vssscc
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+coverage*.info
+*.coverage.*
+*.dll
+*.exe
+!**/testhost.dll
+
+# ============================================================
+# Rider / Visual Studio Code
+# ============================================================
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
+.idea/**/contentModel.xml
+.idea/**/dataSources/
+.idea/**/dataSources.ids
+.idea/**/dataSources.local.xml
+.idea/**/sqlDataSources.xml
+.idea/**/dynamic.xml
+.idea/**/uiDesigner.xml
+.idea/**/gradle.xml
+.idea/**/libraries
+*.iws
+
+# ============================================================
+# Terraform
+# ============================================================
+**/.terraform/*
 *.tfstate
 *.tfstate.*
-.terraform/
-terraform/.terraform/
-appsettings.Development.json
-terraform/.terraform.lock.hcl
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+.terraform.lock.hcl
+!terraform.tfvars.example
+!environments/*.tfvars.example
+
+# ============================================================
+# Environment / Secrets
+# ============================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+secrets.json
+appsettings.Production.json
+appsettings.Local.json
+local.settings.json
+
+# ============================================================
+# Docker
+# ============================================================
+.dockerignore.bak
+docker-compose.override.yml
+*.tar
+*.tar.gz
+
+# ============================================================
+# OS junk
+# ============================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ============================================================
+# Logs / Coverage / Build outputs
+# ============================================================
+*.log
+logs/
+coverage/
+coverage-report/
+.opencover/
+*.received.*
+*.approved.*
+
+# ============================================================
+# Azure / Deployment
+# ============================================================
+.azure/
+azureprofile.json
+*.azureauth
+.terraform.tfstate.lock.info
+deployment-outputs.json
+
+# ============================================================
+# Node (if you add tooling later, e.g. commitlint)
+# ============================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ============================================================
+# GitHub Actions local artifacts
+# ============================================================
+.actrc
+.artifacts/

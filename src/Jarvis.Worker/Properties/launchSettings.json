@@ -1,7 +1,7 @@
 ﻿{
   "$schema": "https://json.schemastore.org/launchsettings.json",
   "profiles": {
-    "Jarvis.SuitWorker": {
+    "Jarvis.Worker": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "environmentVariables": {

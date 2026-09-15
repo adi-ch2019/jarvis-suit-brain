@@ -1,0 +1,15 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  sql:
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Jarvis!Passw0rd"
+    ports: ["1433:1433"]
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    ports: ["10000:10000", "10001:10001", "10002:10002"]

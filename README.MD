@@ -18,4 +18,4 @@
 | **Distributed Caching** | Redis for sub-10ms suit status |
 | **Async Messaging** | Service Bus for JARVIS coordination |
 
-## 🏗️ Architecture
+

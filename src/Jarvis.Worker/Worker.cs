@@ -1,4 +1,4 @@
-namespace Jarvis.SuitWorker;
+namespace Jarvis.Worker;
 
 public class Worker(ILogger<Worker> logger) : BackgroundService
 {
