@@ -92,7 +92,7 @@ else
 {
     // Register a null sender so the POST /telemetry endpoint can inject it
     // and skip the publish step. Keeps DI graph resolvable.
-    builder.Services.AddSingleton<ServiceBusSender?>(_ => null);
+    builder.Services.AddSingleton<ServiceBusSender>(_ => null!);
 }
 
 // ===========================================================================
