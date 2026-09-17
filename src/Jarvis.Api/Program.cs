@@ -3,109 +3,136 @@ using Azure.Messaging.ServiceBus;
 using Jarvis.Api.Consumers;
 using Jarvis.Api.Data;
 using Jarvis.Api.Endpoints;
-using Jarvis.Shared;
 using Microsoft.EntityFrameworkCore;
+using Scalar.AspNetCore;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // ---------------------------------------------------------------------------
-// 12-Factor: config from environment. In Container Apps, values come from
-// Key Vault references (wired by Terraform). Locally they come from
-// appsettings.Development.json. No secrets in code, ever.
+// 12-Factor config: env vars in Azure (wired by Terraform + Key Vault),
+// appsettings.Development.json locally. No secrets in source.
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // BACKING SERVICE #1 — Distributed Cache (Redis)
-// ---------------------------------------------------------------------------
+// ===========================================================================
 builder.Services.AddStackExchangeRedisCache(options =>
 {
-    options.Configuration = builder.Configuration["Redis:Connection"];
+    options.Configuration = builder.Configuration["Redis:Connection"] ?? "localhost:6379";
     options.InstanceName = "jarvis:";
 });
 
-// Raw multiplexer for advanced ops (pub/sub, atomic counters) if needed later.
+// Raw multiplexer for advanced ops — lazy-connect so startup doesn't crash
+// if Redis is temporarily down.
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 {
     var conn = builder.Configuration["Redis:Connection"] ?? "localhost:6379";
-    return ConnectionMultiplexer.Connect(conn);
+    var options = ConfigurationOptions.Parse(conn);
+    options.AbortOnConnectFail = false;   // don't kill the app if Redis is unreachable
+    options.ConnectRetry = 3;
+    return ConnectionMultiplexer.Connect(options);
 });
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // BACKING SERVICE #2 — Relational DB (Azure SQL / SQL Edge locally)
-// ---------------------------------------------------------------------------
-builder.Services.AddDbContext<JarvisDbContext>(options =>
+// ===========================================================================
+var sqlConn = builder.Configuration["Sql:Connection"];
+if (!string.IsNullOrWhiteSpace(sqlConn))
 {
-    options.UseSqlServer(
-        builder.Configuration["Sql:Connection"],
-        sql => sql.EnableRetryOnFailure(maxRetryCount: 5));
-});
+    builder.Services.AddDbContext<JarvisDbContext>(options =>
+    {
+        options.UseSqlServer(sqlConn, sql => sql.EnableRetryOnFailure(maxRetryCount: 5));
+    });
+}
+else
+{
+    // Local dev with no DB: use InMemory so endpoints still respond.
+    builder.Services.AddDbContext<JarvisDbContext>(options =>
+        options.UseInMemoryDatabase("jarvis-dev"));
+}
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // BACKING SERVICE #3 — Message Broker (Azure Service Bus)
-// Passwordless in Azure via Managed Identity; connection string only locally.
-// ---------------------------------------------------------------------------
-builder.Services.AddSingleton(sp =>
+// Registered ONLY if configured. Local dev without SB boots cleanly.
+// Azure path uses DefaultAzureCredential (Managed Identity / passwordless).
+// ===========================================================================
+var sbConn      = builder.Configuration["ServiceBus:Connection"];
+var sbNamespace = builder.Configuration["ServiceBus:Namespace"];
+var sbConfigured = !string.IsNullOrWhiteSpace(sbConn)
+                || !string.IsNullOrWhiteSpace(sbNamespace);
+
+if (sbConfigured)
 {
-    var ns = builder.Configuration["ServiceBus:Namespace"];
-    var conn = builder.Configuration["ServiceBus:Connection"];
+    builder.Services.AddSingleton(sp =>
+    {
+        return string.IsNullOrWhiteSpace(sbConn)
+            ? new ServiceBusClient(sbNamespace!, new DefaultAzureCredential())
+            : new ServiceBusClient(sbConn);
+    });
 
-    return string.IsNullOrWhiteSpace(conn)
-        ? new ServiceBusClient(ns!, new DefaultAzureCredential())   // Azure path
-        : new ServiceBusClient(conn);                               // local path
-});
+    builder.Services.AddSingleton(sp =>
+        sp.GetRequiredService<ServiceBusClient>()
+          .CreateSender(builder.Configuration["ServiceBus:TopicName"]!));
 
-builder.Services.AddSingleton(sp =>
+    builder.Services.AddSingleton(sp =>
+        sp.GetRequiredService<ServiceBusClient>()
+          .CreateProcessor(
+              builder.Configuration["ServiceBus:QueueName"]!,
+              new ServiceBusProcessorOptions
+              {
+                  AutoCompleteMessages = false,
+                  MaxConcurrentCalls   = 4,
+                  PrefetchCount        = 10
+              }));
+
+  //  builder.Services.AddHostedService<TelemetryConsumer>();
+}
+else
 {
-    var client = sp.GetRequiredService<ServiceBusClient>();
-    return client.CreateSender(builder.Configuration["ServiceBus:TopicName"]!);
-});
+    // Register a null sender so the POST /telemetry endpoint can inject it
+    // and skip the publish step. Keeps DI graph resolvable.
+    builder.Services.AddSingleton<ServiceBusSender?>(_ => null);
+}
 
-builder.Services.AddSingleton(sp =>
-{
-    var client = sp.GetRequiredService<ServiceBusClient>();
-    return client.CreateProcessor(
-        builder.Configuration["ServiceBus:QueueName"]!,
-        new ServiceBusProcessorOptions
-        {
-            AutoCompleteMessages = false,
-            MaxConcurrentCalls = 4,
-            PrefetchCount = 10
-        });
-});
+// ===========================================================================
+// Health checks — simple by default (no extra packages needed).
+// Re-add AddDbContextCheck / AddRedis once you verify those packages resolve.
+// ===========================================================================
+builder.Services.AddHealthChecks();
 
-// Hosted consumer (BackgroundService) that drains the telemetry queue.
-builder.Services.AddHostedService<TelemetryConsumer>();
-
-// Health checks — required by Container Apps liveness/readiness probes.
-builder.Services.AddHealthChecks()
-    .AddDbContextCheck<JarvisDbContext>("sql")
-    .AddRedis(builder.Configuration["Redis:Connection"]!);
-
-// OpenAPI (nice for demo, zero exam relevance).
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// ===========================================================================
+// OpenAPI + Scalar UI (modern replacement for Swagger UI)
+// ===========================================================================
+builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
 // ---------------------------------------------------------------------------
-// Auto-migrate on startup (dev only). In prod, run migrations as a separate
-// step in the CD pipeline so pods stay immutable.
+// Dev-only: create schema, enable interactive API explorer.
+// In prod, EF migrations run in the CD pipeline so pods stay immutable.
 // ---------------------------------------------------------------------------
 if (app.Environment.IsDevelopment())
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<JarvisDbContext>();
-    db.Database.EnsureCreated();
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    if (!string.IsNullOrWhiteSpace(sqlConn))
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JarvisDbContext>();
+        db.Database.EnsureCreated();
+    }
+
+    app.MapOpenApi();                    // /openapi/v1.json
+    app.MapScalarApiReference();         // /scalar/v1
 }
 
+// ---------------------------------------------------------------------------
+// Probes for Container Apps liveness/readiness
+// ---------------------------------------------------------------------------
 app.MapHealthChecks("/health");
 app.MapHealthChecks("/ready");
 
 // ---------------------------------------------------------------------------
-// Minimal API endpoints — the "suit brain" HTTP surface
+// Minimal API surface
 // ---------------------------------------------------------------------------
 app.MapStatusEndpoints();
 

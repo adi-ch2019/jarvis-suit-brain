@@ -48,9 +48,5 @@ public class AlertPublisher(
         await args.CompleteMessageAsync(args.Message, args.CancellationToken);
     }
 
-    public override async Task DisposeAsync()
-    {
-        await processor.DisposeAsync();
-        await base.DisposeAsync();
-    }
+   
 }

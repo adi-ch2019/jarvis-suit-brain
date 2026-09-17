@@ -104,10 +104,5 @@ public class TelemetryConsumer(
         return Task.CompletedTask;
     }
 
-    public override async Task DisposeAsync()
-    {
-        await processor.DisposeAsync();
-        await alertSender.DisposeAsync();
-        await base.DisposeAsync();
-    }
+   
 }

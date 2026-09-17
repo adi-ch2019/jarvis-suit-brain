@@ -12,4 +12,8 @@
     <PackageReference Include="Azure.Messaging.ServiceBus" Version="7.20.2" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.4" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Jarvis.Shared\Jarvis.Shared.csproj" />
+  </ItemGroup>
 </Project>
